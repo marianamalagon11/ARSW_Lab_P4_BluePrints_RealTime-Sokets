@@ -6,9 +6,9 @@ El código de P1/P2/P3 no se toca en sus repos originales; se trae copiado a est
 
 | # | Punto | Dónde | Estado |
 |---|-------|-------|--------|
-| 0 | Copiar backend de P2 (`pom.xml` + `src/`) a `backend/` en este repo + ajustar `.gitignore` (Java/Maven) | `backend/` | ⬜ |
-| 1 | Agregar CORS para `http://localhost:5173` | `backend/` | ⬜ |
-| 2 | Completar CRUD: `PUT` (reemplazo completo de puntos) y `DELETE` en controller + service + persistence | `backend/` | ⬜ |
+| 0 | Copiar backend de P2 (`pom.xml` + `src/`) a `backend/` en este repo + ajustar `.gitignore` (Java/Maven) | `backend/` | ✅ |
+| 1 | Agregar CORS para `http://localhost:5173` | `backend/` | ✅ |
+| 2 | Completar CRUD: `PUT` (reemplazo completo de puntos) y `DELETE` en controller + service + persistence | `backend/` | ✅ |
 | 3 | Soporte STOMP: dependencia websocket, config `/ws-blueprints`, `@MessageMapping("/draw")` → `/topic/blueprints.{author}.{name}`, permitir en `SecurityConfig` | `backend/` | ⬜ |
 | 4 | `.env.local` del Front (`VITE_API_BASE`, rutas `/api/v1/blueprints`) | raíz del Front | ⬜ |
 | 5 | Traer/adaptar cliente API CRUD de P3 (`blueprintsApiClient.js` + login JWT) | `src/services/` | ⬜ |
