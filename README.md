@@ -1,4 +1,6 @@
 # Lab P4 — BluePrints en Tiempo Real (Sockets & STOMP)
+## Paula Lozano y Mariana Malagón
+## Las evidencias se encuentran en docs/evidencias.md
 
 > **Repositorio:** `DECSIS-ECI/Lab_P4_BluePrints_RealTime-Sokets`  
 > **Front:** React + Vite (Canvas, CRUD, y selector de tecnología RT)  
