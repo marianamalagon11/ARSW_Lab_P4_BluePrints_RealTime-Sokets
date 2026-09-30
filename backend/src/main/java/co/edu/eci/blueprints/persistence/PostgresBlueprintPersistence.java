@@ -57,6 +57,24 @@ public class PostgresBlueprintPersistence implements BlueprintPersistence {
         repository.save(entity);
     }
 
+    @Override
+    public void updateBlueprint(String author, String name, List<Point> points) throws BlueprintNotFoundException {
+        BlueprintEntity entity = repository.findByAuthorAndName(author, name)
+                .orElseThrow(() -> new BlueprintNotFoundException(
+                        "Blueprint not found: %s/%s".formatted(author, name)));
+        entity.getPoints().clear();
+        points.forEach(p -> entity.getPoints().add(new PointEmbeddable(p.x(), p.y())));
+        repository.save(entity);
+    }
+
+    @Override
+    public void deleteBlueprint(String author, String name) throws BlueprintNotFoundException {
+        BlueprintEntity entity = repository.findByAuthorAndName(author, name)
+                .orElseThrow(() -> new BlueprintNotFoundException(
+                        "Blueprint not found: %s/%s".formatted(author, name)));
+        repository.delete(entity);
+    }
+
     // Conversión entre modelo de dominio y entidad JPA
 
     private BlueprintEntity toEntity(Blueprint bp) {

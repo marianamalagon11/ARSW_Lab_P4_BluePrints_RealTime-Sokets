@@ -94,9 +94,42 @@ public class BlueprintsAPIController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(body);
     }
 
+    @Operation(summary = "Reemplazar los puntos de un blueprint existente")
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Blueprint actualizado"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Blueprint no encontrado")
+    })
+    @PutMapping("/{author}/{bpname}")
+    @PreAuthorize("hasAuthority('SCOPE_blueprints.write')")
+    public ResponseEntity<ApiResponse<Void>> update(@PathVariable String author, @PathVariable String bpname,
+                                                      @Valid @RequestBody UpdateBlueprintRequest req)
+            throws BlueprintNotFoundException {
+        services.updateBlueprint(author, bpname, req.points());
+        ApiResponse<Void> body = new ApiResponse<>(200, "execute ok", null);
+        return ResponseEntity.ok(body);
+    }
+
+    @Operation(summary = "Eliminar un blueprint existente")
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Blueprint eliminado"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Blueprint no encontrado")
+    })
+    @DeleteMapping("/{author}/{bpname}")
+    @PreAuthorize("hasAuthority('SCOPE_blueprints.write')")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable String author, @PathVariable String bpname)
+            throws BlueprintNotFoundException {
+        services.deleteBlueprint(author, bpname);
+        ApiResponse<Void> body = new ApiResponse<>(200, "execute ok", null);
+        return ResponseEntity.ok(body);
+    }
+
     public record NewBlueprintRequest(
             @NotBlank String author,
             @NotBlank String name,
+            @Valid List<Point> points
+    ) { }
+
+    public record UpdateBlueprintRequest(
             @Valid List<Point> points
     ) { }
 }
