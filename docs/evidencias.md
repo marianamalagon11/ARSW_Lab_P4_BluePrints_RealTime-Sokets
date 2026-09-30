@@ -7,6 +7,12 @@ Backend usado: **P2 (Java21 + JWT)**, traído a `backend/` en este repo. Tecnolo
 | # | Descripción | Punto |
 |---|---|---|
 | 1 | `mvn compile` con BUILD SUCCESS sobre el backend ya copiado y con CORS agregado | [Backend: copia + CORS](#backend-copia-a-backend--cors) |
+| 2 | Login en Swagger, token obtenido | [Backend: CRUD completo](#backend-crud-completo-put-y-delete) |
+| 3 | Pegando el token en el botón Authorize | [Backend: CRUD completo](#backend-crud-completo-put-y-delete) |
+| 4 | Sesión autorizada en Swagger | [Backend: CRUD completo](#backend-crud-completo-put-y-delete) |
+| 5 | POST exitoso, blueprint `mari/pruebaLAB` creado (201) | [Backend: CRUD completo](#backend-crud-completo-put-y-delete) |
+| 6 | PUT, reemplazo completo de puntos (200) | [Backend: CRUD completo](#backend-crud-completo-put-y-delete) |
+| 7 | DELETE del blueprint de prueba (200) | [Backend: CRUD completo](#backend-crud-completo-put-y-delete) |
 
 ---
 
@@ -37,5 +43,34 @@ Quedaron disponibles:
 
 Si el blueprint indicado no existe, ambas operaciones responden 404 automáticamente, usando el mismo manejador de errores que ya tenían los demás endpoints.
 
+Esto se probó contra la base de datos real (Postgres en Docker), usando la interfaz de Swagger que ya traía el backend en lugar de `curl`.
+
+Primero se hizo login y se autorizó la sesión con el token obtenido.
+
+![Login en Swagger](evidencias/02-swagger-login.png)
+*Figura 2. Login desde Swagger, con el token de acceso en la respuesta.*
+
+![Pegando el token en Authorize](evidencias/03-swagger-authorize.png)
+*Figura 3. El token pegado en el botón Authorize de Swagger.*
+
+![Sesión autorizada](evidencias/04-swagger-authorized.png)
+*Figura 4. La sesión queda autorizada para las siguientes peticiones.*
+
+Con la sesión autorizada, el POST creó el blueprint `mari/pruebaLAB`.
+
+![POST exitoso](evidencias/07-swagger-post-ok.png)
+*Figura 5. Blueprint `mari/pruebaLAB` creado (201).*
+
+Luego se probó el PUT nuevo (`/api/v1/blueprints/mari/pruebaLAB`), enviando un cuerpo `{"points": [...]}` que reemplazó toda la lista de puntos del blueprint.
+
+![PUT correcto, reemplazo completo](evidencias/10-swagger-put-full-ok.png)
+*Figura 6. El PUT respondiendo 200 y reemplazando los puntos del blueprint.*
+
+Por último se borró el blueprint de prueba con el DELETE nuevo.
+
+![DELETE exitoso](evidencias/09-swagger-delete-ok.png)
+*Figura 7. Blueprint `mari/pruebaLAB` eliminado (200).*
+
+Con esto quedaron probadas las cuatro operaciones del CRUD (crear, leer, actualizar y eliminar) contra la base de datos real.
 
 ---
