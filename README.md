@@ -1,5 +1,5 @@
 # Lab P4 — BluePrints en Tiempo Real (Sockets & STOMP)
-## Paula Lozano y Mariana Malagón
+## Mariana Malagón y Paula Lozano
 ## Las evidencias se encuentran en docs/evidencias.md
 
 ---
