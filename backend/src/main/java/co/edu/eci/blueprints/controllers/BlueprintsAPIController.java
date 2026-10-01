@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,8 +24,18 @@ import java.util.Set;
 public class BlueprintsAPIController {
 
     private final BlueprintsServices services;
+    private final SimpMessagingTemplate messagingTemplate;
 
-    public BlueprintsAPIController(BlueprintsServices services) { this.services = services; }
+    public BlueprintsAPIController(BlueprintsServices services, SimpMessagingTemplate messagingTemplate) {
+        this.services = services;
+        this.messagingTemplate = messagingTemplate;
+    }
+
+    // Avisa por STOMP a los clientes que tienen cargado al autor que uno de sus planos cambió
+    private void notifyChange(String action, String author, String name) {
+        messagingTemplate.convertAndSend("/topic/authors.%s".formatted(author),
+                new BlueprintChange(action, author, name));
+    }
 
     @Operation(summary = "Obtener todos los blueprints registrados")
     @ApiResponses(value = {
@@ -75,6 +86,7 @@ public class BlueprintsAPIController {
             throws BlueprintPersistenceException {
         Blueprint bp = new Blueprint(req.author(), req.name(), req.points());
         services.addNewBlueprint(bp);
+        notifyChange("created", bp.getAuthor(), bp.getName());
         ApiResponse<Void> body = new ApiResponse<>(201, "execute ok", null);
         return ResponseEntity.status(HttpStatus.CREATED).body(body);
     }
@@ -90,6 +102,7 @@ public class BlueprintsAPIController {
                                                        @RequestBody Point p)
             throws BlueprintNotFoundException {
         services.addPoint(author, bpname, p.x(), p.y());
+        notifyChange("updated", author, bpname);
         ApiResponse<Void> body = new ApiResponse<>(202, "execute ok", null);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(body);
     }
@@ -105,6 +118,7 @@ public class BlueprintsAPIController {
                                                       @Valid @RequestBody UpdateBlueprintRequest req)
             throws BlueprintNotFoundException {
         services.updateBlueprint(author, bpname, req.points());
+        notifyChange("updated", author, bpname);
         ApiResponse<Void> body = new ApiResponse<>(200, "execute ok", null);
         return ResponseEntity.ok(body);
     }
@@ -119,6 +133,7 @@ public class BlueprintsAPIController {
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable String author, @PathVariable String bpname)
             throws BlueprintNotFoundException {
         services.deleteBlueprint(author, bpname);
+        notifyChange("deleted", author, bpname);
         ApiResponse<Void> body = new ApiResponse<>(200, "execute ok", null);
         return ResponseEntity.ok(body);
     }
@@ -132,4 +147,6 @@ public class BlueprintsAPIController {
     public record UpdateBlueprintRequest(
             @Valid List<Point> points
     ) { }
+
+    public record BlueprintChange(String action, String author, String name) { }
 }

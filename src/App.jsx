@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { createStompClient, subscribeBlueprint, publishPoint } from './lib/stompClient.js'
+import {
+  createStompClient,
+  subscribeTopic,
+  blueprintTopic,
+  authorTopic,
+  publishPoint,
+} from './lib/stompClient.js'
 import { createSocket } from './lib/socketIoClient.js'
 import { login, logout, isLoggedIn } from './services/authClient.js'
 import * as bpApi from './services/blueprintsApiClient.js'
@@ -53,9 +59,11 @@ export default function App() {
   const [logged, setLogged] = useState(isLoggedIn())
   const [tech, setTech] = useState('stomp')
   const [rtStatus, setRtStatus] = useState('desconectado')
+  const [stompConnected, setStompConnected] = useState(false)
 
   const [author, setAuthor] = useState('juan')
   const [blueprints, setBlueprints] = useState([])
+  const [loadedAuthor, setLoadedAuthor] = useState(null) // autor cuya tabla se está mostrando
   const [newName, setNewName] = useState('')
 
   // Plano abierto en el canvas: { author, name } o null
@@ -67,6 +75,8 @@ export default function App() {
   const canvasRef = useRef(null)
   const stompRef = useRef(null)
   const socketRef = useRef(null)
+  const currentRef = useRef(null)
+  currentRef.current = current
 
   const totalPoints = blueprints.reduce((acc, bp) => acc + bp.points.length, 0)
 
@@ -85,10 +95,13 @@ export default function App() {
     try {
       const list = await bpApi.getByAuthor(a)
       setBlueprints([...list].sort((x, y) => x.name.localeCompare(y.name)))
+      setLoadedAuthor(a)
     } catch (err) {
       // El backend responde 404 cuando el autor aún no tiene planos
-      if (err.response?.status === 404) setBlueprints([])
-      else showError(err)
+      if (err.response?.status === 404) {
+        setBlueprints([])
+        setLoadedAuthor(a)
+      } else showError(err)
     }
   }
 
@@ -151,6 +164,7 @@ export default function App() {
     logout()
     setLogged(false)
     setBlueprints([])
+    setLoadedAuthor(null)
     setCurrent(null)
     setPoints([])
   }
@@ -168,39 +182,82 @@ export default function App() {
     setDirty(true)
   }
 
+  // Otra pestaña (o esta misma) creó, guardó o borró un plano del autor cargado
+  async function onBlueprintChange(change) {
+    console.info('[STOMP] cambio en plano', change)
+    await loadAuthor(change.author)
+    const cur = currentRef.current
+    if (!cur || cur.author !== change.author || cur.name !== change.name) return
+    if (change.action === 'deleted') {
+      setCurrent(null)
+      setPoints([])
+      setDirty(false)
+      setNotice({ type: 'ok', text: `Plano "${change.name}" eliminado` })
+    } else if (change.action === 'updated') {
+      // La base de datos es la fuente de verdad: se releen los puntos guardados
+      try {
+        const bp = await bpApi.getByAuthorAndName(change.author, change.name)
+        setPoints(bp.points)
+        setDirty(false)
+      } catch (err) {
+        showError(err)
+      }
+    }
+  }
+  const onBlueprintChangeRef = useRef(onBlueprintChange)
+  onBlueprintChangeRef.current = onBlueprintChange
+
+  // Una sola conexión STOMP mientras haya sesión; las suscripciones van en los efectos de abajo
   useEffect(() => {
-    if (!current || tech === 'none') {
-      setRtStatus('desconectado')
+    if (tech !== 'stomp' || !logged) {
+      if (tech === 'none') setRtStatus('desconectado')
       return
     }
-    const { author: a, name: n } = current
-
-    if (tech === 'stomp') {
-      const client = createStompClient(API_BASE)
-      stompRef.current = client
-      let unsubscribe = null
-      setRtStatus('conectando...')
-      client.onConnect = () => {
-        console.info('[STOMP] conectado a', API_BASE)
-        setRtStatus('conectado')
-        unsubscribe = subscribeBlueprint(client, a, n, (msg) => {
-          console.debug('[STOMP] punto recibido', msg.point)
-          appendPoint(msg.point)
-        })
-      }
-      client.onWebSocketClose = () => setRtStatus('reconectando...')
-      client.activate()
-      return () => {
-        unsubscribe?.()
-        // Cierre intencional: que el evento de cierre no marque "reconectando..."
-        client.onWebSocketClose = () => {}
-        client.deactivate()
-        stompRef.current = null
-      }
+    const client = createStompClient(API_BASE)
+    stompRef.current = client
+    setRtStatus('conectando...')
+    client.onConnect = () => {
+      console.info('[STOMP] conectado a', API_BASE)
+      setRtStatus('conectado')
+      setStompConnected(true)
     }
+    client.onWebSocketClose = () => {
+      console.warn('[STOMP] conexión cerrada, reintentando...')
+      setRtStatus('reconectando...')
+      setStompConnected(false)
+    }
+    client.activate()
+    return () => {
+      // Cierre intencional: que el evento de cierre no marque "reconectando..."
+      client.onWebSocketClose = () => {}
+      client.deactivate()
+      stompRef.current = null
+      setStompConnected(false)
+      setRtStatus('desconectado')
+    }
+  }, [tech, logged])
 
-    // Socket.IO: se deja el cliente del scaffold por si se prueba con el backend Node
-    const room = `blueprints.${a}.${n}`
+  // Puntos del plano abierto
+  useEffect(() => {
+    if (!stompConnected || !current) return
+    return subscribeTopic(stompRef.current, blueprintTopic(current.author, current.name), (msg) => {
+      console.debug('[STOMP] punto recibido', msg.point)
+      appendPoint(msg.point)
+    })
+  }, [stompConnected, current])
+
+  // Cambios del CRUD en los planos del autor cargado
+  useEffect(() => {
+    if (!stompConnected || !loadedAuthor) return
+    return subscribeTopic(stompRef.current, authorTopic(loadedAuthor), (change) =>
+      onBlueprintChangeRef.current(change),
+    )
+  }, [stompConnected, loadedAuthor])
+
+  // Socket.IO: se deja el cliente del scaffold por si se prueba con el backend Node
+  useEffect(() => {
+    if (tech !== 'socketio' || !current) return
+    const room = `blueprints.${current.author}.${current.name}`
     const s = createSocket(IO_BASE)
     socketRef.current = s
     setRtStatus('conectando...')
@@ -217,8 +274,8 @@ export default function App() {
     return () => {
       s.disconnect()
       socketRef.current = null
+      setRtStatus('desconectado')
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tech, current])
 
   function onCanvasClick(e) {

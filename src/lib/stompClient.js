@@ -14,23 +14,28 @@ export function createStompClient(baseUrl) {
     heartbeatIncoming: 10000,
     heartbeatOutgoing: 10000,
     onStompError: (f) => console.error('[STOMP] error', f.headers['message']),
-    onWebSocketClose: () => console.warn('[STOMP] conexión cerrada, reintentando...'),
   })
   return client
 }
 
+// Puntos dibujados en un plano
 export function blueprintTopic(author, name) {
   return `/topic/blueprints.${author}.${name}`
 }
 
+// Cambios del CRUD (created / updated / deleted) en los planos de un autor; los publica el backend
+export function authorTopic(author) {
+  return `/topic/authors.${author}`
+}
+
 // Devuelve una función para cancelar la suscripción.
-export function subscribeBlueprint(client, author, name, onMsg) {
-  const topic = blueprintTopic(author, name)
+export function subscribeTopic(client, topic, onMsg) {
   console.info('[STOMP] suscrito a', topic)
   const sub = client.subscribe(topic, (m) => onMsg(JSON.parse(m.body)))
   return () => {
     console.info('[STOMP] desuscrito de', topic)
-    sub.unsubscribe()
+    // Si la conexión ya se cayó no hay nada que cancelar en el servidor
+    if (client.connected) sub.unsubscribe()
   }
 }
 
