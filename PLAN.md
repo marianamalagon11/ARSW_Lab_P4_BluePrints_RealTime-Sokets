@@ -11,7 +11,7 @@ El código de P1/P2/P3 no se toca en sus repos originales; se trae copiado a est
 | 2 | Completar CRUD: `PUT` (reemplazo completo de puntos) y `DELETE` en controller + service + persistence | `backend/` | ✅ |
 | 3 | Soporte STOMP: dependencia websocket, config `/ws-blueprints`, `@MessageMapping("/draw")` → `/topic/blueprints.{author}.{name}`, permitir en `SecurityConfig` | `backend/` | ✅ |
 | 4 | `.env.local` del Front (`VITE_API_BASE`, rutas `/api/v1/blueprints`) | raíz del Front | ✅ |
-| 5 | Traer/adaptar cliente API CRUD de P3 (`blueprintsApiClient.js` + login JWT) | `src/services/` | ⬜ |
+| 5 | Traer/adaptar cliente API CRUD de P3 (`blueprintsApiClient.js` + login JWT) | `src/services/` | ✅ |
 | 6 | Panel CRUD en `App.jsx`: tabla de planos por autor + total de puntos (`reduce`) + Create/Save/Delete | `src/` | ⬜ |
 | 7 | Verificar integración STOMP ya scaffoldeada (`stompClient.js`) contra el backend copiado | `src/` | ⬜ |
 | 8 | Prueba end-to-end: 2 pestañas dibujando en vivo + CRUD refrescando lista/total | — | ⬜ |
