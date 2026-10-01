@@ -285,7 +285,7 @@ Así se ve en la consola de la pestaña B:
 
 | Tiempo | Qué se ve |
 |---|---|
-| 0:00 – 0:20 | Las dos ventanas en `plano-1`, la casita con puerta y una ventana (14 puntos). Se dibuja una segunda ventana en la casita y los puntos aparecen en las dos ventanas al mismo tiempo (14 → 20 puntos, "sin guardar"). Luego **Save/Update**: `plano-1` queda con 20 puntos y el total en 23. |
+| 0:00 – 0:20 | Las dos ventanas en `plano-1`, la casita con puerta y una ventana (14 puntos). Se dibuja una segunda ventana en la casita y los puntos aparecen en las dos ventanas al mismo tiempo (14 a 20 puntos, "sin guardar"). Luego **Save/Update**: `plano-1` queda con 20 puntos y el total en 23. |
 | 0:20 – 0:34 | **Create** de `plano-3` en la ventana A. Aparece también en la tabla de la ventana B sin recargar. A empieza a dibujar en `plano-3` mientras B abre `plano-2`. |
 | 0:34 – 0:45 | Cada ventana en un plano distinto: lo que se dibuja en uno no aparece en el otro (aislamiento por plano). B dibuja en `plano-2`. |
 | 0:45 – 0:56 | **Save** de `plano-2` en B: la tabla de A se actualiza sola (`plano-2` con 6 puntos, total 26). Por último, **Delete** de `plano-3` en A, que también desaparece de la tabla de B. |
