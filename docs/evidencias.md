@@ -24,6 +24,8 @@ Backend usado: **P2 (Java21 + JWT)**, traído a `backend/` en este repo. Tecnolo
 | 16 | Delete de `plano-3`, el total vuelve a su valor anterior | [Front: CRUD desde la interfaz](#front-crud-desde-la-interfaz) |
 | 17 | Cliente en "reconectando..." con el backend apagado | [Análisis: latencia y reconexión](#análisis-latencia-y-reconexión) |
 | 18 | Cliente reconectado solo, dibujando de nuevo | [Análisis: latencia y reconexión](#análisis-latencia-y-reconexión) |
+| 19 | Save en la pestaña A y la pestaña B actualizada sola | [Sincronización del CRUD entre pestañas](#sincronización-del-crud-entre-pestañas) |
+| 20 | Delete en la pestaña A cierra el plano también en la pestaña B | [Sincronización del CRUD entre pestañas](#sincronización-del-crud-entre-pestañas) |
 
 ---
 
@@ -122,7 +124,7 @@ Si el autor todavía no tiene planos, el backend responde 404; el Front lo inter
 ![Panel del autor](evidencias/12-front-panel-autor.png)
 *Figura 9. Planos del autor `juan`: `plano-1` con 6 puntos, `plano-2` con 3, total 9.*
 
-Al hacer clic en una fila, el Front pide ese plano a la API (`GET /api/v1/blueprints/juan/plano-1`) y lo dibuja en el canvas. Ese es el **estado inicial** del plano. En ese momento también se conecta a STOMP y se suscribe al tópico del plano; la etiqueta verde "conectado" lo confirma.
+Al hacer clic en una fila, el Front pide ese plano a la API (`GET /api/v1/blueprints/juan/plano-1`) y lo dibuja en el canvas. Ese es el **estado inicial** del plano. La conexión STOMP ya está abierta desde el login (la etiqueta verde "conectado" lo confirma); al abrir el plano solo se suscribe a su tópico.
 
 ![Plano cargado](evidencias/13-front-plano-cargado.png)
 *Figura 10. `plano-1` cargado desde la API y dibujado en el canvas, con STOMP conectado.*
@@ -152,6 +154,7 @@ Además, en la consola del navegador quedan registros de la conexión, la suscri
 
 ```
 [STOMP] conectado a http://localhost:8080
+[STOMP] suscrito a /topic/authors.juan
 [STOMP] suscrito a /topic/blueprints.juan.plano-1
 [STOMP] punto recibido {x: 181, y: 301}
 [STOMP] punto recibido {x: 181, y: 231}
@@ -167,8 +170,11 @@ Y la pestaña de `plano-2`, en el mismo tiempo, solo registró su propia suscrip
 
 ```
 [STOMP] conectado a http://localhost:8080
+[STOMP] suscrito a /topic/authors.juan
 [STOMP] suscrito a /topic/blueprints.juan.plano-2
 ```
+
+(La suscripción a `/topic/authors.juan` se explica en [Sincronización del CRUD entre pestañas](#sincronización-del-crud-entre-pestañas).)
 
 ---
 
@@ -211,7 +217,7 @@ Una curiosidad que encontramos al medir: si la pestaña que dibuja está en segu
 ![Reconectando](evidencias/20-rt-reconectando.png)
 *Figura 17. Backend apagado: el cliente muestra "reconectando..." y la página sigue funcionando.*
 
-Al volver a levantar el backend (tardó unos 19 segundos en arrancar), el cliente se reconectó **en 0,8 segundos**, volvió a suscribirse solo al tópico de `plano-2` y el siguiente punto dibujado llegó normalmente, sin recargar la página.
+Al volver a levantar el backend (tarda unos 17–19 segundos en arrancar), el cliente se reconectó **en menos de un segundo** (0,8 s en una prueba y 0,09 s en otra; depende de en qué momento del reintento de cada segundo vuelve el backend). Se volvió a suscribir solo a los tópicos de `plano-2` y del autor, y el siguiente punto dibujado llegó normalmente, sin recargar la página.
 
 ![Reconectado](evidencias/21-rt-reconectado.png)
 *Figura 18. Backend de nuevo arriba: el cliente se reconectó solo y el punto nuevo llegó por el tópico.*
@@ -226,5 +232,47 @@ Lo que **no** se recupera son los puntos que alguien dibuje mientras el backend 
 | Canales | Tópicos `/topic/...` con prefijos estándar; el broker en memoria de Spring hace el reenvío | Salas (`join-room`) que se manejan a mano en el servidor |
 | Reconexión | La da `@stomp/stompjs` (`reconnectDelay`); hay que volver a suscribirse en `onConnect` | Viene incluida y vuelve a unirse a la sala si se programa en el evento `connect` |
 | Contras | Más configuración (prefijos, broker, endpoint); el broker en memoria no sirve si hay varias instancias del backend | Es otro proceso y otro lenguaje que desplegar, y no comparte la seguridad JWT de Spring |
+
+---
+
+## Sincronización del CRUD entre pestañas
+
+Al grabar la demo encontramos un problema: al presionar **Save/Update** en una pestaña, la otra no cambiaba nada. Seguía mostrando "sin guardar" y la tabla con los conteos viejos, aunque los puntos sí le habían llegado por STOMP. Con Create y Delete pasaba lo mismo: solo se enteraba la pestaña que hacía la operación, porque era la única que volvía a pedir la lista a la API.
+
+Para resolverlo, ahora **el backend avisa por STOMP cada vez que un plano cambia**. Después de cada `POST`, `PUT` o `DELETE` exitoso, `BlueprintsAPIController` publica un mensaje corto en el tópico del autor:
+
+```
+/topic/authors.{autor}   →   { "action": "created" | "updated" | "deleted", "author": "juan", "name": "plano-1" }
+```
+
+Cada pestaña se suscribe al tópico del autor que tiene cargado en la tabla. Al recibir un aviso, vuelve a pedir la lista (así la tabla y el total quedan al día). Si el aviso es sobre el plano que tiene abierto, también hace algo con el canvas:
+- **updated:** vuelve a leer el plano desde la API y quita el "sin guardar".
+- **deleted:** cierra el plano y avisa que fue eliminado.
+
+Decidimos que el aviso lo mande el backend, y no la pestaña que guardó, para que solo se anuncie lo que de verdad quedó guardado en la base de datos. Si el `PUT` falla, nadie recibe un aviso falso.
+
+También reorganizamos la conexión del Front: antes se abría una conexión STOMP por cada plano abierto; ahora hay **una sola conexión** mientras la sesión esté iniciada, y sobre ella dos suscripciones, una al tópico del plano (puntos) y otra al tópico del autor (cambios del CRUD).
+
+Prueba: con las dos pestañas en `juan/plano-1`, se dibujó en ambas y se presionó Save en la pestaña A. La pestaña B, sin tocarla, quitó el "sin guardar" y actualizó la tabla (`plano-1` con 14 puntos, total 17).
+
+![Save sincronizado](evidencias/22-sync-save-dos-pestanas.png)
+*Figura 19. Save en la pestaña A; la pestaña B se actualiza sola: 14 puntos guardados, total 17.*
+
+Luego, con `plano-3` abierto en las dos pestañas, se borró desde A. La pestaña B cerró el plano, mostró el aviso y su total volvió a 17. Al crear `plano-3` desde A también había aparecido en la tabla de B sin recargar.
+
+![Delete sincronizado](evidencias/23-sync-delete-dos-pestanas.png)
+*Figura 20. Delete en la pestaña A; la pestaña B, que tenía el mismo plano abierto, lo cierra y actualiza la tabla.*
+
+Así se ve en la consola de la pestaña B:
+
+```
+[STOMP] cambio en plano {action: updated, author: juan, name: plano-1}
+[STOMP] cambio en plano {action: created, author: juan, name: plano-3}
+[STOMP] cambio en plano {action: updated, author: juan, name: plano-3}
+[STOMP] desuscrito de /topic/blueprints.juan.plano-1
+[STOMP] suscrito a /topic/blueprints.juan.plano-3
+[STOMP] cambio en plano {action: deleted, author: juan, name: plano-3}
+[STOMP] desuscrito de /topic/blueprints.juan.plano-3
+```
 
 ---

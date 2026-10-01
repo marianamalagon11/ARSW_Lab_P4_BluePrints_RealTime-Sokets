@@ -54,12 +54,15 @@ Todas las rutas `/api/v1/**` llevan `Authorization: Bearer <token>`. Las respues
 |---|---|
 | Endpoint WebSocket | `ws://localhost:8080/ws-blueprints` |
 | Publicar un punto | `/app/draw` con `{ author, name, point: { x, y } }` |
-| Suscribirse a un plano | `/topic/blueprints.{author}.{name}` |
+| Suscribirse a un plano (puntos) | `/topic/blueprints.{author}.{name}` |
+| Suscribirse a un autor (cambios del CRUD, los publica el backend) | `/topic/authors.{author}` con `{ action: created \| updated \| deleted, author, name }` |
 
 ## Decisiones
 
 - **Un tópico por plano** (`blueprints.{author}.{name}`): cada pestaña solo recibe los puntos del plano que tiene abierto, así que los planos quedan aislados entre sí.
 - **El punto se pinta cuando vuelve del broker**, no al hacer clic. Como el broker reenvía el punto también a quien lo mandó, todas las pestañas pintan en el mismo orden. Si el tiempo real está en "None" o desconectado, el punto se pinta solo en local.
+- **Los cambios del CRUD se avisan por STOMP.** Después de cada `POST`/`PUT`/`DELETE` exitoso, el backend publica en `/topic/authors.{author}`; las demás pestañas del autor recargan la tabla y, si tienen abierto ese plano, lo releen o lo cierran. El aviso sale del backend para que solo se anuncie lo que de verdad quedó guardado.
+- **Una sola conexión STOMP por pestaña** mientras la sesión está iniciada, con una suscripción al plano abierto y otra al autor cargado.
 - **El tiempo real no guarda en la base de datos.** Los puntos dibujados se persisten con **Save/Update** (`PUT`). Así el `DrawController` queda simple y la escritura en Postgres sigue pasando por la API con JWT. La interfaz avisa con "sin guardar" cuando hay cambios pendientes.
 - **WebSocket sin JWT.** `/ws-blueprints` está en `permitAll` y restringido al origen `http://localhost:5173`. Para producción habría que validar el token en el `CONNECT` de STOMP.
 - **Reconexión automática** con `reconnectDelay: 1000`; al reconectar el cliente se vuelve a suscribir al tópico.
@@ -69,7 +72,8 @@ Todas las rutas `/api/v1/**` llevan `Authorization: Bearer <token>`. Las respues
 ## Hallazgos (detalle en `docs/evidencias.md`)
 
 - Latencia de un punto entre dos pestañas: **33–53 ms** en local.
-- Con el backend caído el cliente muestra "reconectando..."; al volver el backend se reconectó en **0,8 s** sin recargar la página.
+- Con el backend caído el cliente muestra "reconectando..."; al volver el backend se reconectó en **menos de 1 s** y se volvió a suscribir solo, sin recargar la página.
+- Save, Create y Delete en una pestaña se reflejan en las demás pestañas del mismo autor.
 - Comparativa STOMP vs Socket.IO en la sección *Análisis* de las evidencias.
 
 ---
