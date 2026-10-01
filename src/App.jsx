@@ -192,6 +192,8 @@ export default function App() {
       client.activate()
       return () => {
         unsubscribe?.()
+        // Cierre intencional: que el evento de cierre no marque "reconectando..."
+        client.onWebSocketClose = () => {}
         client.deactivate()
         stompRef.current = null
       }
