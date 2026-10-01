@@ -13,6 +13,17 @@ Backend usado: **P2 (Java21 + JWT)**, traído a `backend/` en este repo. Tecnolo
 | 5 | POST exitoso, blueprint `mari/pruebaLAB` creado (201) | [Backend: CRUD completo](#backend-crud-completo-put-y-delete) |
 | 6 | PUT, reemplazo completo de puntos (200) | [Backend: CRUD completo](#backend-crud-completo-put-y-delete) |
 | 7 | DELETE del blueprint de prueba (200) | [Backend: CRUD completo](#backend-crud-completo-put-y-delete) |
+| 8 | Pantalla de login del Front | [Front: login y panel del autor](#front-login-y-panel-del-autor) |
+| 9 | Tabla de planos del autor `juan` con el total de puntos | [Front: login y panel del autor](#front-login-y-panel-del-autor) |
+| 10 | Plano `plano-1` cargado desde la API y STOMP conectado | [Front: login y panel del autor](#front-login-y-panel-del-autor) |
+| 11 | Dos pestañas dibujando el mismo plano en vivo | [Tiempo real con STOMP](#tiempo-real-con-stomp) |
+| 12 | Tercera pestaña en `plano-2` que no recibe los puntos de `plano-1` | [Tiempo real con STOMP](#tiempo-real-con-stomp) |
+| 13 | Save/Update del plano dibujado, la tabla y el total se refrescan | [Front: CRUD desde la interfaz](#front-crud-desde-la-interfaz) |
+| 14 | Create de `plano-3` | [Front: CRUD desde la interfaz](#front-crud-desde-la-interfaz) |
+| 15 | `plano-3` dibujado y guardado | [Front: CRUD desde la interfaz](#front-crud-desde-la-interfaz) |
+| 16 | Delete de `plano-3`, el total vuelve a su valor anterior | [Front: CRUD desde la interfaz](#front-crud-desde-la-interfaz) |
+| 17 | Cliente en "reconectando..." con el backend apagado | [Análisis: latencia y reconexión](#análisis-latencia-y-reconexión) |
+| 18 | Cliente reconectado solo, dibujando de nuevo | [Análisis: latencia y reconexión](#análisis-latencia-y-reconexión) |
 
 ---
 
@@ -72,5 +83,148 @@ Por último se borró el blueprint de prueba con el DELETE nuevo.
 *Figura 7. Blueprint `mari/pruebaLAB` eliminado (200).*
 
 Con esto quedaron probadas las cuatro operaciones del CRUD (crear, leer, actualizar y eliminar) contra la base de datos real.
+
+---
+
+## Antes de las pruebas del Front
+
+El backend necesita un Postgres. Como en el repo no había forma de levantarlo, agregamos `backend/docker-compose.yml`, que crea la base `blueprints_db` con el mismo usuario y contraseña de `application.yml`. Con eso, levantar todo son tres comandos:
+
+```bash
+cd backend && docker compose up -d     # Postgres
+mvn spring-boot:run                    # backend en :8080 (REST + STOMP)
+cd .. && npm i && npm run dev          # Front en :5173
+```
+
+Para tener algo que mostrar se crearon por la API dos planos del autor `juan`: `plano-1` (una casita de 6 puntos) y `plano-2` (3 puntos).
+
+Las capturas de esta parte se tomaron con un script de Playwright que abre el Front en Microsoft Edge, hace los clics como lo haría una persona y guarda la imagen de la pantalla en cada paso. Así cada imagen es la aplicación real funcionando contra el backend y la base de datos reales.
+
+---
+
+## Front: login y panel del autor
+
+El `App.jsx` que venía con el enunciado era solo un esqueleto: pedía los puntos a una ruta que no existe en nuestro backend (`/api/blueprints/...` en vez de `/api/v1/blueprints/...`), no mandaba el token y no tenía tabla ni botones. Lo reescribimos usando los clientes que ya habíamos traído de la Parte 3 (`blueprintsApiClient.js` y `authClient.js`).
+
+Como todos los endpoints de `/api/v1/**` piden JWT, lo primero que muestra la aplicación es un login. Al entrar, el token queda guardado en el navegador y `apiClient.js` lo agrega solo a cada petición. Si el token vence (el backend responde 401), la aplicación vuelve al login con un aviso.
+
+![Login del Front](evidencias/11-front-login.png)
+*Figura 8. Pantalla de login del Front (usuario `student`).*
+
+Después del login se cargan los planos del autor. La tabla muestra cada plano con su cantidad de puntos, y la fila **Total** se calcula sumando los puntos de todos los planos con `reduce`:
+
+```js
+const totalPoints = blueprints.reduce((acc, bp) => acc + bp.points.length, 0)
+```
+
+Si el autor todavía no tiene planos, el backend responde 404; el Front lo interpreta como "lista vacía" y no como un error.
+
+![Panel del autor](evidencias/12-front-panel-autor.png)
+*Figura 9. Planos del autor `juan`: `plano-1` con 6 puntos, `plano-2` con 3, total 9.*
+
+Al hacer clic en una fila, el Front pide ese plano a la API (`GET /api/v1/blueprints/juan/plano-1`) y lo dibuja en el canvas. Ese es el **estado inicial** del plano. En ese momento también se conecta a STOMP y se suscribe al tópico del plano; la etiqueta verde "conectado" lo confirma.
+
+![Plano cargado](evidencias/13-front-plano-cargado.png)
+*Figura 10. `plano-1` cargado desde la API y dibujado en el canvas, con STOMP conectado.*
+
+---
+
+## Tiempo real con STOMP
+
+Cada plano tiene su propio "canal" en el backend, llamado tópico: `/topic/blueprints.{autor}.{plano}`. Cuando alguien hace clic en el canvas, el Front no pinta el punto directamente: lo envía al backend a `/app/draw`, y el `DrawController` lo reenvía a todos los que estén suscritos al tópico de ese plano, **incluida la misma pestaña que lo mandó**. Así todas las pestañas pintan los puntos en el mismo orden y nadie queda desfasado.
+
+Al probarlo encontramos dos problemas en el cliente STOMP del esqueleto, y los corregimos:
+
+1. El backend manda **un punto por mensaje** (`{ author, name, point }`), pero el Front esperaba la lista completa de puntos (`upd.points`) y se rompía al recibir el primer mensaje. Ahora agrega el punto recibido a los que ya tenía.
+2. La dirección del WebSocket se armaba con `http://`. Ahora se convierte a `ws://`, que es lo que espera un WebSocket.
+
+Para la prueba se abrieron dos pestañas en `juan/plano-1`. Desde la pestaña A se dibujó una puerta (4 clics) y desde la pestaña B una ventana (4 clics). Las dos terminaron con los mismos 14 puntos, en el mismo orden.
+
+![Dos pestañas en vivo](evidencias/14-rt-dos-pestanas.png)
+*Figura 11. Pestañas A y B en `juan/plano-1`. La puerta se dibujó desde A y la ventana desde B; las dos ven el plano completo (14 puntos).*
+
+Al mismo tiempo había una tercera pestaña abierta en `juan/plano-2`. Como está suscrita a otro tópico, no recibió ninguno de esos 8 puntos: cada plano está **aislado** de los demás.
+
+![Aislamiento por plano](evidencias/15-rt-aislamiento-plano-2.png)
+*Figura 12. La pestaña en `plano-2` sigue con sus 3 puntos mientras se dibujaba en `plano-1`.*
+
+Además, en la consola del navegador quedan registros de la conexión, la suscripción y cada punto recibido. Esto es lo que mostró la pestaña B durante la prueba:
+
+```
+[STOMP] conectado a http://localhost:8080
+[STOMP] suscrito a /topic/blueprints.juan.plano-1
+[STOMP] punto recibido {x: 181, y: 301}
+[STOMP] punto recibido {x: 181, y: 231}
+[STOMP] punto recibido {x: 221, y: 231}
+[STOMP] punto recibido {x: 221, y: 301}
+[STOMP] punto recibido {x: 261, y: 181}
+[STOMP] punto recibido {x: 301, y: 181}
+[STOMP] punto recibido {x: 301, y: 221}
+[STOMP] punto recibido {x: 261, y: 221}
+```
+
+Y la pestaña de `plano-2`, en el mismo tiempo, solo registró su propia suscripción:
+
+```
+[STOMP] conectado a http://localhost:8080
+[STOMP] suscrito a /topic/blueprints.juan.plano-2
+```
+
+---
+
+## Front: CRUD desde la interfaz
+
+Los puntos que llegan por STOMP solo viajan entre pestañas; **no se guardan en la base de datos** hasta que alguien presiona **Save/Update**. Por eso, mientras haya puntos nuevos sin guardar, junto al nombre del plano aparece "sin guardar".
+
+**Save/Update.** Llama al `PUT` que agregamos al backend (`PUT /api/v1/blueprints/juan/plano-1`) con todos los puntos del canvas y luego vuelve a pedir la lista del autor. En la tabla, `plano-1` pasó de 6 a 14 puntos y el total de 9 a 17.
+
+![Save/Update](evidencias/16-crud-save.png)
+*Figura 13. `plano-1` guardado con 14 puntos; la tabla y el total (17) se refrescan.*
+
+**Create.** Se escribe el nombre en "nuevo plano" y se presiona **Create**. El Front hace `POST /api/v1/blueprints` con el plano vacío, lo agrega a la tabla y lo abre en el canvas ya conectado a su tópico.
+
+![Create](evidencias/17-crud-create.png)
+*Figura 14. `plano-3` creado vacío y abierto en el canvas.*
+
+Se dibujó un triángulo y se guardó. El total subió de 17 a 21. Después se recargó la página y, al abrir `plano-3`, seguía teniendo sus 4 puntos, lo que confirma que quedaron guardados en Postgres.
+
+![Create + Save](evidencias/18-crud-create-save.png)
+*Figura 15. `plano-3` con 4 puntos guardados; total 21.*
+
+**Delete.** El botón pide confirmación y luego llama a `DELETE /api/v1/blueprints/juan/plano-3`. El plano desaparece de la tabla, el canvas se limpia y el total vuelve a 17.
+
+![Delete](evidencias/19-crud-delete.png)
+*Figura 16. `plano-3` eliminado; la tabla y el total vuelven a como estaban.*
+
+Si una operación falla (por ejemplo, crear un plano que ya existe), el mensaje que devuelve el backend aparece en rojo arriba del panel, en vez de fallar en silencio.
+
+---
+
+## Análisis: latencia y reconexión
+
+**Latencia.** Durante la prueba de las dos pestañas medimos cuánto tarda un punto desde el clic en una pestaña hasta que aparece en la otra. En las 8 mediciones (4 en cada dirección) estuvo entre **33 y 53 ms**, y ese tiempo incluye el clic simulado y el redibujo del canvas. Todo corre en la misma máquina, así que en una red real habría que sumar el tiempo de viaje por la red, pero para dibujar a mano la sensación es inmediata.
+
+Una curiosidad que encontramos al medir: si la pestaña que dibuja está en segundo plano, el navegador la "frena" para ahorrar recursos, y en esas condiciones las mediciones llegaron a 2–3 segundos. No es un problema del backend ni de STOMP; para el video conviene tener las dos ventanas visibles lado a lado.
+
+**Reconexión.** Con una pestaña abierta en `plano-2` apagamos el backend a propósito. La etiqueta pasó a "reconectando..." y el cliente siguió intentando conectarse cada segundo (`reconnectDelay: 1000` en `stompClient.js`).
+
+![Reconectando](evidencias/20-rt-reconectando.png)
+*Figura 17. Backend apagado: el cliente muestra "reconectando..." y la página sigue funcionando.*
+
+Al volver a levantar el backend (tardó unos 19 segundos en arrancar), el cliente se reconectó **en 0,8 segundos**, volvió a suscribirse solo al tópico de `plano-2` y el siguiente punto dibujado llegó normalmente, sin recargar la página.
+
+![Reconectado](evidencias/21-rt-reconectado.png)
+*Figura 18. Backend de nuevo arriba: el cliente se reconectó solo y el punto nuevo llegó por el tópico.*
+
+Lo que **no** se recupera son los puntos que alguien dibuje mientras el backend está caído: esa pestaña los pinta localmente, pero las otras no los reciben. Si después se presiona Save, sí quedan en la base de datos, y las demás pestañas los ven al volver a abrir el plano.
+
+**Pros y contras de STOMP frente a Socket.IO** (en este laboratorio solo implementamos STOMP):
+
+| | STOMP (Spring) | Socket.IO (Node) |
+|---|---|---|
+| Integración con nuestro backend | Corre dentro del mismo backend de Spring, en el mismo puerto, sin un servidor aparte | Habría que montar y mantener un servidor Node adicional |
+| Canales | Tópicos `/topic/...` con prefijos estándar; el broker en memoria de Spring hace el reenvío | Salas (`join-room`) que se manejan a mano en el servidor |
+| Reconexión | La da `@stomp/stompjs` (`reconnectDelay`); hay que volver a suscribirse en `onConnect` | Viene incluida y vuelve a unirse a la sala si se programa en el evento `connect` |
+| Contras | Más configuración (prefijos, broker, endpoint); el broker en memoria no sirve si hay varias instancias del backend | Es otro proceso y otro lenguaje que desplegar, y no comparte la seguridad JWT de Spring |
 
 ---
