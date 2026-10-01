@@ -1,0 +1,17 @@
+# Postgres para el backend (mismas credenciales que src/main/resources/application.yml)
+# Uso: docker compose up -d   (desde la carpeta backend/)
+services:
+  postgres:
+    image: postgres:16
+    container_name: blueprints-postgres
+    environment:
+      POSTGRES_DB: blueprints_db
+      POSTGRES_USER: blueprints_user
+      POSTGRES_PASSWORD: blueprints_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - blueprints-data:/var/lib/postgresql/data
+
+volumes:
+  blueprints-data:
