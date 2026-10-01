@@ -10,7 +10,7 @@
 **Tiempo real:** STOMP sobre el mismo backend de Spring (no se usa servidor Node).
 **Front:** React + Vite en la raíz del repo.
 
-**Video de la demo (≤ 90 s):** _pendiente_
+**Video de la demo (56 s):** [docs/evidencias/Video.mp4](docs/evidencias/Video.mp4). Muestra dos ventanas dibujando el mismo plano en vivo, Save, Create y Delete, y cómo cada cambio se refleja en la otra ventana.
 
 ## Puesta en marcha
 

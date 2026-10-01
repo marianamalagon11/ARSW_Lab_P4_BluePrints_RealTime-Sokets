@@ -15,6 +15,6 @@ El código de P1/P2/P3 no se toca en sus repos originales; se trae copiado a est
 | 6 | Panel CRUD en `App.jsx`: tabla de planos por autor + total de puntos (`reduce`) + Create/Save/Delete | `src/` | ✅ |
 | 7 | Verificar integración STOMP ya scaffoldeada (`stompClient.js`) contra el backend copiado | `src/` | ✅ |
 | 8 | Prueba end-to-end: 2 pestañas dibujando en vivo + CRUD refrescando lista/total | — | ✅ |
-| 9 | README del equipo + evidencias (capturas/video corto) — falta solo el video | raíz | 🔄 |
+| 9 | README del equipo + evidencias (capturas/video corto) | raíz | ✅ |
 
 **Leyenda:** ⬜ pendiente · 🔄 en progreso · ✅ hecho
