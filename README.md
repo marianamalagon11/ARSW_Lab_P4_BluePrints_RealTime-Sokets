@@ -1,4 +1,84 @@
 # Lab P4 — BluePrints en Tiempo Real (Sockets & STOMP)
+## Mariana Malagón y Paula Lozano
+## Las evidencias se encuentran en docs/evidencias.md
+
+---
+
+# README del equipo
+
+**Backend:** el de la Parte 2 (Java 21 + Spring Boot + JWT + Postgres), copiado a `backend/`.
+**Tiempo real:** STOMP sobre el mismo backend de Spring (no se usa servidor Node).
+**Front:** React + Vite en la raíz del repo.
+
+**Video de la demo (56 s):** [docs/evidencias/Video.mp4](docs/evidencias/Video.mp4). Muestra dos ventanas dibujando el mismo plano en vivo, Save, Create y Delete, y cómo cada cambio se refleja en la otra ventana.
+
+## Puesta en marcha
+
+Requisitos: Java 21, Maven, Node 18+ y Docker.
+
+```bash
+# 1) Postgres (desde backend/)
+cd backend
+docker compose up -d
+
+# 2) Backend REST + STOMP en http://localhost:8080
+mvn spring-boot:run
+
+# 3) Front en http://localhost:5173 (desde la raíz, en otra terminal)
+cp .env.example .env.local
+npm i
+npm run dev
+```
+
+Usuarios de prueba (en memoria, `InMemoryUserService`): `student` / `student123` y `assistant` / `assistant123`.
+Swagger: http://localhost:8080/swagger-ui.html
+
+Para ver la colaboración: entra con un usuario, escribe el autor y presiona **Cargar**, crea o selecciona un plano y abre una segunda pestaña en el mismo plano. Los clics en el canvas aparecen en las dos.
+
+## Endpoints usados
+
+| Método | Ruta | Uso en el Front |
+|---|---|---|
+| `POST` | `/auth/login` | Login, devuelve el JWT |
+| `GET` | `/api/v1/blueprints/{author}` | Tabla del autor y total de puntos (404 = autor sin planos) |
+| `GET` | `/api/v1/blueprints/{author}/{name}` | Estado inicial del plano al abrirlo |
+| `POST` | `/api/v1/blueprints` | **Create** (plano vacío) |
+| `PUT` | `/api/v1/blueprints/{author}/{name}` | **Save/Update**, reemplaza todos los puntos |
+| `DELETE` | `/api/v1/blueprints/{author}/{name}` | **Delete** |
+
+Todas las rutas `/api/v1/**` llevan `Authorization: Bearer <token>`. Las respuestas vienen envueltas en `{ code, message, data }`.
+
+**STOMP**
+
+| | Destino |
+|---|---|
+| Endpoint WebSocket | `ws://localhost:8080/ws-blueprints` |
+| Publicar un punto | `/app/draw` con `{ author, name, point: { x, y } }` |
+| Suscribirse a un plano (puntos) | `/topic/blueprints.{author}.{name}` |
+| Suscribirse a un autor (cambios del CRUD, los publica el backend) | `/topic/authors.{author}` con `{ action: created \| updated \| deleted, author, name }` |
+
+## Decisiones
+
+- **Un tópico por plano** (`blueprints.{author}.{name}`): cada pestaña solo recibe los puntos del plano que tiene abierto, así que los planos quedan aislados entre sí.
+- **El punto se pinta cuando vuelve del broker**, no al hacer clic. Como el broker reenvía el punto también a quien lo mandó, todas las pestañas pintan en el mismo orden. Si el tiempo real está en "None" o desconectado, el punto se pinta solo en local.
+- **Los cambios del CRUD se avisan por STOMP.** Después de cada `POST`/`PUT`/`DELETE` exitoso, el backend publica en `/topic/authors.{author}`; las demás pestañas del autor recargan la tabla y, si tienen abierto ese plano, lo releen o lo cierran. El aviso sale del backend para que solo se anuncie lo que de verdad quedó guardado.
+- **Una sola conexión STOMP por pestaña** mientras la sesión está iniciada, con una suscripción al plano abierto y otra al autor cargado.
+- **El tiempo real no guarda en la base de datos.** Los puntos dibujados se persisten con **Save/Update** (`PUT`). Así el `DrawController` queda simple y la escritura en Postgres sigue pasando por la API con JWT. La interfaz avisa con "sin guardar" cuando hay cambios pendientes.
+- **WebSocket sin JWT.** `/ws-blueprints` está en `permitAll` y restringido al origen `http://localhost:5173`. Para producción habría que validar el token en el `CONNECT` de STOMP.
+- **Reconexión automática** con `reconnectDelay: 1000`; al reconectar el cliente se vuelve a suscribir al tópico.
+- **Logs en consola** (`[STOMP] conectado`, `suscrito a`, `punto recibido`, `desuscrito de`) para seguir la conexión y los eventos.
+- Se agregó `backend/docker-compose.yml` para levantar Postgres con las credenciales de `application.yml`.
+
+## Hallazgos (detalle en `docs/evidencias.md`)
+
+- Latencia de un punto entre dos pestañas: **33–53 ms** en local.
+- Con el backend caído el cliente muestra "reconectando..."; al volver el backend se reconectó en **menos de 1 s** y se volvió a suscribir solo, sin recargar la página.
+- Save, Create y Delete en una pestaña se reflejan en las demás pestañas del mismo autor.
+- Comparativa STOMP vs Socket.IO en la sección *Análisis* de las evidencias.
+
+---
+
+# Enunciado del laboratorio
 
 > **Repositorio:** `DECSIS-ECI/Lab_P4_BluePrints_RealTime-Sokets`  
 > **Front:** React + Vite (Canvas, CRUD, y selector de tecnología RT)  
